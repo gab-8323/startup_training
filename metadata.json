@@ -1,0 +1,6 @@
+{
+  "name": "Campus2Career Academy",
+  "description": "A modern, professional training & placement preparation platform for engineering and degree students featuring coding practice, aptitude tests, mock exams, company preparation, and career resources.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

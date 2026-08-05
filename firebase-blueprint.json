@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "coding_problems": {
+      "title": "String",
+      "category": "String",
+      "difficulty": "String",
+      "companyTags": "Array<String>",
+      "problemStatement": "String",
+      "constraints": "Array<String>",
+      "sampleCases": "Array<Map>",
+      "createdAt": "Timestamp"
+    },
+    "mock_tests": {
+      "title": "String",
+      "category": "String",
+      "subcategory": "String",
+      "durationMinutes": "Number",
+      "passingScore": "Number",
+      "totalQuestions": "Number",
+      "difficulty": "String",
+      "questions": "Array<Map>",
+      "createdAt": "Timestamp"
+    },
+    "test_results": {
+      "userId": "String",
+      "candidateName": "String",
+      "testId": "String",
+      "testTitle": "String",
+      "score": "Number",
+      "totalScore": "Number",
+      "accuracy": "Number",
+      "passed": "Boolean",
+      "answers": "Map",
+      "timeSpentSeconds": "Number",
+      "submittedAt": "Timestamp"
+    },
+    "resources": {
+      "title": "String",
+      "category": "String",
+      "subject": "String",
+      "fileSize": "String",
+      "fileType": "String",
+      "description": "String",
+      "downloadUrl": "String",
+      "tags": "Array<String>",
+      "createdAt": "Timestamp"
+    }
+  }
+}
