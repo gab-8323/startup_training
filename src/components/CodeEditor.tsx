@@ -12,56 +12,77 @@ interface CodeEditorProps {
 function highlightCode(code: string, language: string): string {
   if (!code) return '';
 
-  // 1. Escape HTML entities first so < and > in code don't break HTML layout
-  let text = code
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  const escapeHtml = (str: string) =>
+    str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
-  // Token masking store for all highlighted elements
-  const tokens: string[] = [];
-  const mask = (val: string, cls: string) => {
-    const idx = tokens.length;
-    tokens.push(`<span class="${cls}">${val}</span>`);
-    return `___TOKEN_${idx}___`;
+  const pythonKeywords = new Set(['def', 'return', 'if', 'elif', 'else', 'for', 'while', 'in', 'is', 'not', 'and', 'or', 'import', 'from', 'as', 'class', 'pass', 'break', 'continue', 'lambda', 'try', 'except', 'finally', 'raise', 'with', 'yield', 'global', 'nonlocal', 'self']);
+  const jsKeywords = new Set(['function', 'return', 'if', 'else', 'for', 'while', 'in', 'of', 'import', 'export', 'from', 'default', 'class', 'const', 'let', 'var', 'switch', 'case', 'break', 'continue', 'try', 'catch', 'finally', 'throw', 'new', 'typeof', 'instanceof', 'async', 'await']);
+  const cppKeywords = new Set(['int', 'float', 'double', 'char', 'bool', 'void', 'auto', 'const', 'static', 'struct', 'class', 'public', 'private', 'protected', 'template', 'typename', 'using', 'namespace', 'include', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'new', 'delete', 'vector', 'string', 'cout', 'cin', 'endl']);
+  const javaKeywords = new Set(['public', 'private', 'protected', 'class', 'interface', 'extends', 'implements', 'static', 'final', 'void', 'int', 'double', 'float', 'boolean', 'char', 'String', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'new', 'import', 'package', 'try', 'catch', 'finally', 'throw', 'throws']);
+  const booleansAndNull = new Set(['True', 'False', 'None', 'true', 'false', 'null', 'undefined', 'NULL']);
+
+  let keywords = jsKeywords;
+  if (language === 'python') keywords = pythonKeywords;
+  else if (language === 'cpp') keywords = cppKeywords;
+  else if (language === 'java') keywords = javaKeywords;
+
+  const lines = code.split('\n');
+
+  const highlightLine = (line: string): string => {
+    // Regex matches: comments, strings, words/identifiers, numbers, operators/punctuation
+    const tokenRegex = /(#.*$|\/\/.*$|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_]\w*\b|[{}()\[\];,]|=|\+|-|\*|\/|%|<|>|!|&|\|)/g;
+
+    let lastIndex = 0;
+    let result = '';
+    let match: RegExpExecArray | null;
+
+    while ((match = tokenRegex.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        result += escapeHtml(line.slice(lastIndex, match.index));
+      }
+
+      const token = match[0];
+      const escapedToken = escapeHtml(token);
+
+      if (token.startsWith('#') || token.startsWith('//') || token.startsWith('/*')) {
+        result += `<span class="text-slate-500 italic">${escapedToken}</span>`;
+      } else if (
+        (token.startsWith('"') && token.endsWith('"')) ||
+        (token.startsWith("'") && token.endsWith("'")) ||
+        (token.startsWith('`') && token.endsWith('`'))
+      ) {
+        result += `<span class="text-emerald-400 font-medium">${escapedToken}</span>`;
+      } else if (/^\d+(\.\d+)?$/.test(token)) {
+        result += `<span class="text-orange-400 font-medium">${escapedToken}</span>`;
+      } else if (booleansAndNull.has(token)) {
+        result += `<span class="text-amber-400 font-semibold">${escapedToken}</span>`;
+      } else if (keywords.has(token)) {
+        result += `<span class="text-purple-400 font-bold">${escapedToken}</span>`;
+      } else if (/^[a-zA-Z_]\w*$/.test(token)) {
+        const remaining = line.slice(tokenRegex.lastIndex);
+        if (/^\s*\(/.test(remaining)) {
+          result += `<span class="text-sky-400 font-semibold">${escapedToken}</span>`;
+        } else {
+          result += `<span class="text-slate-200">${escapedToken}</span>`;
+        }
+      } else {
+        result += `<span class="text-slate-400">${escapedToken}</span>`;
+      }
+
+      lastIndex = tokenRegex.lastIndex;
+    }
+
+    if (lastIndex < line.length) {
+      result += escapeHtml(line.slice(lastIndex));
+    }
+
+    return result;
   };
 
-  // 2. Mask Strings (single, double, multi-line)
-  text = text.replace(/(["'`])(?:(?=(\\?))\2[\s\S])*?\1/g, (m) => mask(m, 'text-emerald-400 font-medium'));
-
-  // 3. Mask Comments
-  if (language === 'python') {
-    text = text.replace(/(#.*$)/gm, (m) => mask(m, 'text-slate-500 italic'));
-  } else {
-    text = text.replace(/(\/\*[\s\S]*?\*\/|\/\/.*$)/gm, (m) => mask(m, 'text-slate-500 italic'));
-  }
-
-  // 4. Language Keywords
-  const pythonKeywords = /\b(def|return|if|elif|else|for|while|in|is|not|and|or|import|from|as|class|pass|break|continue|lambda|try|except|finally|raise|with|yield|global|nonlocal|self)\b/g;
-  const jsKeywords = /\b(function|return|if|else|for|while|in|of|import|export|from|default|class|const|let|var|switch|case|break|continue|try|catch|finally|throw|new|typeof|instanceof|async|await)\b/g;
-  const cppKeywords = /\b(int|float|double|char|bool|void|auto|const|static|struct|class|public|private|protected|template|typename|using|namespace|include|return|if|else|for|while|do|switch|case|break|continue|new|delete|vector|string|cout|cin|endl)\b/g;
-  const javaKeywords = /\b(public|private|protected|class|interface|extends|implements|static|final|void|int|double|float|boolean|char|String|return|if|else|for|while|do|switch|case|break|continue|new|import|package|try|catch|finally|throw|throws)\b/g;
-
-  let keywordRegex = jsKeywords;
-  if (language === 'python') keywordRegex = pythonKeywords;
-  else if (language === 'cpp') keywordRegex = cppKeywords;
-  else if (language === 'java') keywordRegex = javaKeywords;
-
-  text = text.replace(keywordRegex, (m) => mask(m, 'text-purple-400 font-bold'));
-
-  // 5. Booleans & Null
-  text = text.replace(/\b(True|False|None|true|false|null|undefined|NULL)\b/g, (m) => mask(m, 'text-amber-400 font-semibold'));
-
-  // 6. Function Invocations (e.g. functionName(...))
-  text = text.replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*\()/g, (m) => mask(m, 'text-sky-400 font-semibold'));
-
-  // 7. Numbers
-  text = text.replace(/\b(\d+(\.\d+)?)\b/g, (m) => mask(m, 'text-orange-400 font-medium'));
-
-  // 8. Unmask all tokens back into HTML spans
-  text = text.replace(/___TOKEN_(\d+)___/g, (_, id) => tokens[parseInt(id, 10)]);
-
-  return text;
+  return lines.map(highlightLine).join('\n');
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({

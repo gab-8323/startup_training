@@ -96,9 +96,12 @@ def __list_to_tree(arr):
 ${code}
 
 def __parse_val(raw_str):
+    if not isinstance(raw_str, str):
+        return raw_str
     raw_str = raw_str.strip().rstrip(',')
     if not raw_str:
         return None
+    raw_str = raw_str.replace('&quot;', '"').replace('&#39;', "'").replace('&#x27;', "'").replace('&#039;', "'").replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
     try:
         return json.loads(raw_str)
     except Exception:
@@ -112,11 +115,16 @@ def __parse_val(raw_str):
                     return float(raw_str)
                 return int(raw_str)
             except Exception:
+                if (raw_str.startswith('"') and raw_str.endswith('"')) or (raw_str.startswith("'") and raw_str.endswith("'")):
+                    return raw_str[1:-1]
                 return raw_str
 
 def __parse_input_to_dict_and_list(input_str):
     kw_args = {}
     pos_args = []
+    if not input_str:
+        return kw_args, pos_args
+    input_str = input_str.replace('&quot;', '"').replace('&#39;', "'").replace('&#x27;', "'").replace('&#039;', "'").replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
     lines = input_str.strip().split('\\n')
     for line in lines:
         line = line.strip()
@@ -483,6 +491,21 @@ __run();
   }
 });
 
+function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#039;/g, "'")
+    .replace(/&#34;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&amp;/g, '&');
+}
+
 // Helper functions to parse LeetCode HTML content into structured examples and constraints
 function extractExamplesFromHtml(html: string) {
   const examples: Array<{ input: string; output: string; explanation: string }> = [];
@@ -491,19 +514,17 @@ function extractExamplesFromHtml(html: string) {
   const preMatches = html.match(/<pre>([\s\S]*?)<\/pre>/gi) || [];
 
   for (const block of preMatches) {
-    const cleanBlock = block
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<strong>/gi, '')
-      .replace(/<\/strong>/gi, '')
-      .replace(/<em>/gi, '')
-      .replace(/<\/em>/gi, '')
-      .replace(/<code>/gi, '')
-      .replace(/<\/code>/gi, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&gt;/g, '>')
-      .replace(/&lt;/g, '<')
-      .replace(/&amp;/g, '&')
-      .replace(/<[^>]*>/g, '');
+    const cleanBlock = decodeHtmlEntities(
+      block
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<strong>/gi, '')
+        .replace(/<\/strong>/gi, '')
+        .replace(/<em>/gi, '')
+        .replace(/<\/em>/gi, '')
+        .replace(/<code>/gi, '')
+        .replace(/<\/code>/gi, '')
+        .replace(/<[^>]*>/g, '')
+    );
 
     const inputMatch = cleanBlock.match(/Input:\s*([\s\S]*?)(?=Output:|$)/i);
     const outputMatch = cleanBlock.match(/Output:\s*([\s\S]*?)(?=Explanation:|$)/i);
@@ -511,9 +532,9 @@ function extractExamplesFromHtml(html: string) {
 
     if (inputMatch || outputMatch) {
       examples.push({
-        input: inputMatch ? inputMatch[1].trim() : '',
-        output: outputMatch ? outputMatch[1].trim() : '',
-        explanation: expMatch ? expMatch[1].trim() : 'Sample case from LeetCode',
+        input: inputMatch ? decodeHtmlEntities(inputMatch[1].trim()) : '',
+        output: outputMatch ? decodeHtmlEntities(outputMatch[1].trim()) : '',
+        explanation: expMatch ? decodeHtmlEntities(expMatch[1].trim()) : 'Sample case from LeetCode',
       });
     }
   }
@@ -529,16 +550,14 @@ function extractConstraintsFromHtml(html: string): string[] {
   if (constraintsSectionMatch) {
     const liMatches = constraintsSectionMatch[0].match(/<li>([\s\S]*?)<\/li>/gi) || [];
     for (const li of liMatches) {
-      const clean = li
-        .replace(/<sup>([\s\S]*?)<\/sup>/gi, '^$1')
-        .replace(/<sub>([\s\S]*?)<\/sub>/gi, '_$1')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&gt;/g, '>')
-        .replace(/&lt;/g, '<')
-        .replace(/&amp;/g, '&')
-        .replace(/<[^>]*>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const clean = decodeHtmlEntities(
+        li
+          .replace(/<sup>([\s\S]*?)<\/sup>/gi, '^$1')
+          .replace(/<sub>([\s\S]*?)<\/sub>/gi, '_$1')
+          .replace(/<[^>]*>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      );
       if (clean) {
         constraints.push(clean);
       }

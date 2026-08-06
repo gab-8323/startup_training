@@ -49,6 +49,21 @@ export async function fetchDailyLeetCodeProblem(): Promise<{ title: string; slug
   };
 }
 
+export function decodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#039;/g, "'")
+    .replace(/&#34;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&amp;/g, '&');
+}
+
 export function convertRawLeetCodeToCodingProblem(raw: any): CodingProblem {
   const snippets: CodeSnippet[] = [
     { language: 'python', code: raw.pythonStarter || raw.snippets?.find((s: any) => s.language === 'python')?.code || '# Write your Python solution here\n' },
@@ -65,25 +80,31 @@ export function convertRawLeetCodeToCodingProblem(raw: any): CodingProblem {
 
   let sampleCases: TestCase[] = Array.isArray(raw.testCases) && raw.testCases.length > 0
     ? raw.testCases.map((tc: any) => ({
-        input: tc.input || raw.inputSample || 'See problem statement',
-        output: tc.expectedOutput || tc.output || raw.outputSample || 'See problem statement',
-        explanation: tc.explanation || 'Sample case from LeetCode',
+        input: decodeHtmlEntities(tc.input || raw.inputSample || 'See problem statement'),
+        output: decodeHtmlEntities(tc.expectedOutput || tc.output || raw.outputSample || 'See problem statement'),
+        explanation: decodeHtmlEntities(tc.explanation || 'Sample case from LeetCode'),
       }))
     : Array.isArray(raw.sampleCases) && raw.sampleCases.length > 0
-    ? raw.sampleCases
+    ? raw.sampleCases.map((tc: any) => ({
+        input: decodeHtmlEntities(tc.input),
+        output: decodeHtmlEntities(tc.output),
+        explanation: decodeHtmlEntities(tc.explanation),
+      }))
     : [
         {
-          input: raw.inputSample || '[2, 7, 11, 15], 9',
-          output: raw.outputSample || '[0, 1]',
+          input: decodeHtmlEntities(raw.inputSample || '[2, 7, 11, 15], 9'),
+          output: decodeHtmlEntities(raw.outputSample || '[0, 1]'),
           explanation: 'Sample case from description',
         },
       ];
 
-  const constraintsList = typeof raw.constraints === 'string'
+  const rawConstraintsList = typeof raw.constraints === 'string'
     ? [raw.constraints]
     : Array.isArray(raw.constraints)
     ? raw.constraints
     : ['Refer to the problem description for detailed constraints.'];
+
+  const constraintsList = rawConstraintsList.map((c: string) => decodeHtmlEntities(c));
 
   const rawTitle = (raw.title || 'LeetCode Problem').replace(/^#\s*/, '').trim();
 

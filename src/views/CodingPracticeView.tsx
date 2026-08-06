@@ -282,6 +282,53 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
     }
   };
 
+  // HTML entity decoder helper
+  const decodeHtmlEntities = (str: string): string => {
+    if (!str) return '';
+    return str
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#x27;/g, "'")
+      .replace(/&#039;/g, "'")
+      .replace(/&#34;/g, '"')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#160;/g, ' ')
+      .replace(/&amp;/g, '&');
+  };
+
+  const stripQuotes = (str: string): string => {
+    const s = decodeHtmlEntities(str).trim();
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      return s.slice(1, -1);
+    }
+    return s;
+  };
+
+  const compareOutputs = (actual: string, expected: string): boolean => {
+    const cleanActual = decodeHtmlEntities(actual || '').trim();
+    const cleanExpected = decodeHtmlEntities(expected || '').trim();
+
+    if (cleanActual === cleanExpected) return true;
+
+    const unquotedActual = stripQuotes(cleanActual);
+    const unquotedExpected = stripQuotes(cleanExpected);
+    if (unquotedActual === unquotedExpected) return true;
+
+    try {
+      if (JSON.stringify(JSON.parse(unquotedActual)) === JSON.stringify(JSON.parse(unquotedExpected))) {
+        return true;
+      }
+    } catch (e) {}
+
+    const compactActual = unquotedActual.replace(/\s+/g, '');
+    const compactExpected = unquotedExpected.replace(/\s+/g, '');
+    if (compactActual && compactExpected && compactActual === compactExpected) return true;
+
+    return false;
+  };
+
   // Safe normalize for comparing test results
   const normalizeValue = (val: any): string => {
     if (val === undefined) return 'undefined';
@@ -289,7 +336,7 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
     if (typeof val === 'boolean') return val ? 'true' : 'false';
     if (Array.isArray(val)) return `[${val.map(v => typeof v === 'string' ? `"${v}"` : normalizeValue(v)).join(', ')}]`;
     if (typeof val === 'object') return JSON.stringify(val);
-    return String(val).trim();
+    return decodeHtmlEntities(String(val)).trim();
   };
 
   // Clean JS evaluator that prevents syntax crash & extracts return values strictly
@@ -535,6 +582,9 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
     for (let i = 0; i < sampleCases.length; i++) {
       const testCase = sampleCases[i];
       try {
+        const cleanInput = decodeHtmlEntities(testCase.input);
+        const cleanExpected = decodeHtmlEntities(testCase.output);
+
         const response = await fetch('/api/compile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -542,12 +592,12 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
             language: selectedLanguage,
             code: userCode,
             problemId: activeProblem.id,
-            testCaseInput: testCase.input,
+            testCaseInput: cleanInput,
           }),
         });
 
         const data = await response.json();
-        const stdout = (data.output || '').trim();
+        const stdout = decodeHtmlEntities((data.output || '').trim());
         const stderr = (data.error || '').trim();
 
         if (stderr) {
@@ -556,16 +606,14 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
         }
 
         const actualOutput = stderr ? `Error: ${stderr}` : (stdout || 'undefined');
-        const normActual = normalizeValue(stdout);
-        const normExpected = normalizeValue(testCase.output);
-        const isPassed = !stderr && (normActual === normExpected || stdout === testCase.output || stdout.includes(testCase.output));
+        const isPassed = !stderr && compareOutputs(stdout, cleanExpected);
 
         if (isPassed) passedCounter++;
 
         results.push({
           id: i + 1,
-          input: testCase.input,
-          expected: testCase.output,
+          input: cleanInput,
+          expected: cleanExpected,
           actual: actualOutput,
           passed: isPassed,
           error: stderr || undefined,
@@ -1026,10 +1074,10 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
                             <div className="flex items-center justify-between text-[10px] text-slate-400 font-sans border-b border-slate-800/80 pb-1">
                               <span className="font-bold text-slate-300">Sample Case {idx + 1}</span>
                             </div>
-                            <div><span className="text-slate-400 font-sans font-bold">Input:</span> {sc.input}</div>
-                            <div><span className="text-emerald-400 font-sans font-bold">Expected Output:</span> {sc.output}</div>
+                            <div><span className="text-slate-400 font-sans font-bold">Input:</span> {decodeHtmlEntities(sc.input)}</div>
+                            <div><span className="text-emerald-400 font-sans font-bold">Expected Output:</span> {decodeHtmlEntities(sc.output)}</div>
                             {sc.explanation && (
-                              <div className="text-slate-400 font-sans text-[10px] pt-1 border-t border-slate-800/60">{sc.explanation}</div>
+                              <div className="text-slate-400 font-sans text-[10px] pt-1 border-t border-slate-800/60">{decodeHtmlEntities(sc.explanation)}</div>
                             )}
                           </div>
                         ))}
@@ -1288,7 +1336,7 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
                                 <div>
                                   <span className="text-slate-400 font-sans font-semibold">Input:</span>
                                   <div className="mt-1 p-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-200">
-                                    {testResults[activeTestCaseIndex].input}
+                                    {decodeHtmlEntities(testResults[activeTestCaseIndex].input)}
                                   </div>
                                 </div>
 
@@ -1302,14 +1350,14 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
                                         ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300' 
                                         : 'bg-rose-950/20 border-rose-500/30 text-rose-300 font-bold'
                                     }`}>
-                                      {testResults[activeTestCaseIndex].actual}
+                                      {decodeHtmlEntities(testResults[activeTestCaseIndex].actual)}
                                     </div>
                                   </div>
 
                                   <div>
                                     <span className="text-emerald-400 font-sans font-semibold">Expected:</span>
                                     <div className="mt-1 p-2 rounded-lg bg-emerald-950/20 border border-emerald-500/30 text-emerald-300">
-                                      {testResults[activeTestCaseIndex].expected}
+                                      {decodeHtmlEntities(testResults[activeTestCaseIndex].expected)}
                                     </div>
                                   </div>
                                 </div>
