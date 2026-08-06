@@ -61,7 +61,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   onShowToast,
   darkMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'coding' | 'tests' | 'results' | 'resources' | 'database'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'coding' | 'tests' | 'results' | 'resources' | 'security'>('overview');
 
   // Admin Security & Passcode Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -78,9 +78,28 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
 
-  const handleAuthenticate = (e: React.FormEvent) => {
+  // Synchronize Master Admin Passcode from Firestore across all devices
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, 'admin_config', 'security'),
+      (docSnap) => {
+        if (docSnap.exists() && docSnap.data()?.passcode) {
+          const remotePasscode = String(docSnap.data().passcode);
+          setMasterPasscode(remotePasscode);
+          localStorage.setItem('c2c_admin_passcode', remotePasscode);
+        }
+      },
+      (error) => {
+        console.warn('Firestore admin_config sync fallback to local storage:', error);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const handleAuthenticate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcodeInput.trim() === masterPasscode) {
+    const entered = passcodeInput.trim();
+    if (entered === masterPasscode) {
       setIsAdminAuthenticated(true);
       sessionStorage.setItem('c2c_admin_auth', 'true');
       setPasscodeError(false);
@@ -88,7 +107,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       onShowToast('Admin Panel Unlocked 🔓', 'Welcome to the Super Admin Control Portal.', 'success');
     } else {
       setPasscodeError(true);
-      onShowToast('Access Denied 🔒', 'Incorrect Admin Security Passcode. Default is "admin123".', 'error');
+      onShowToast('Access Denied 🔒', 'Incorrect Admin Security Passcode.', 'error');
     }
   };
 
@@ -98,21 +117,39 @@ export const AdminView: React.FC<AdminViewProps> = ({
     onShowToast('Admin Panel Locked 🔒', 'Admin session has been ended securely.', 'info');
   };
 
-  const handleChangePasscode = (e: React.FormEvent) => {
+  const handleChangePasscode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPasscode.trim() || newPasscode.length < 4) {
+    const cleanPass = newPasscode.trim();
+    if (!cleanPass || cleanPass.length < 4) {
       onShowToast('Invalid Passcode', 'Passcode must be at least 4 characters long.', 'error');
       return;
     }
-    if (newPasscode !== confirmPasscode) {
+    if (cleanPass !== confirmPasscode.trim()) {
       onShowToast('Passcode Mismatch', 'New passcode and confirmation do not match.', 'error');
       return;
     }
-    setMasterPasscode(newPasscode);
-    localStorage.setItem('c2c_admin_passcode', newPasscode);
-    setNewPasscode('');
-    setConfirmPasscode('');
-    onShowToast('Security Passcode Updated 🔑', 'Your admin passcode has been saved successfully.', 'success');
+
+    try {
+      // Save globally in Firestore so all devices receive the new passcode
+      await setDoc(
+        doc(db, 'admin_config', 'security'),
+        { passcode: cleanPass, updatedAt: new Date().toISOString() },
+        { merge: true }
+      );
+      setMasterPasscode(cleanPass);
+      localStorage.setItem('c2c_admin_passcode', cleanPass);
+      setNewPasscode('');
+      setConfirmPasscode('');
+      onShowToast('Security Passcode Updated 🔑', 'Your admin passcode has been saved globally for all devices!', 'success');
+    } catch (err: any) {
+      console.error('Failed updating passcode in Firestore:', err);
+      // Fallback local update
+      setMasterPasscode(cleanPass);
+      localStorage.setItem('c2c_admin_passcode', cleanPass);
+      setNewPasscode('');
+      setConfirmPasscode('');
+      onShowToast('Updated Locally 🔑', 'Passcode saved on this device.', 'success');
+    }
   };
 
   // Firestore Realtime Student Results & Coding Problems
@@ -424,11 +461,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
             </button>
           </form>
 
-          <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 flex items-center justify-between">
-            <span className="font-mono text-[11px]">Default Passcode: <strong>admin123</strong></span>
-            <span className="text-[10px] text-indigo-300">(Editable in Settings)</span>
-          </div>
-
           <div className="pt-2">
             <button
               onClick={() => onNavigate('home')}
@@ -486,7 +518,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
           { id: 'tests', label: 'Manage Mock Tests', icon: Layers },
           { id: 'results', label: 'Student Test Results', icon: Users },
           { id: 'resources', label: 'Templates & Resources', icon: FileText },
-          { id: 'database', label: 'Database & Cost Setup', icon: Database },
+          { id: 'security', label: 'Security Passcode Settings', icon: KeyRound },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1039,64 +1071,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
       )}
 
-      {/* TAB 5: DATABASE & COST SETUP GUIDE */}
-      {activeTab === 'database' && (
+      {/* TAB 5: ADMIN SECURITY PASSCODE SETTINGS */}
+      {activeTab === 'security' && (
         <div className="space-y-6 animate-fadeIn">
-          <div className={`p-6 sm:p-8 rounded-3xl border space-y-6 ${darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-            <div className="flex items-center gap-3">
-              <Database className="w-8 h-8 text-amber-500 shrink-0" />
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Recommended Database & Hosting Setup (Zero or Low Cost)</h3>
-                <p className="text-xs text-slate-500">Best options for maximum free storage space and zero running costs.</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-              
-              {/* Option 1: Firebase Firestore */}
-              <div className={`p-6 rounded-2xl border space-y-3 relative overflow-hidden ${
-                darkMode ? 'bg-slate-950 border-slate-800' : 'bg-amber-50/50 border-amber-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">#1 Top Pick</span>
-                  <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
-                    100% Free Forever Tier
-                  </span>
-                </div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">Google Firebase Firestore & Auth</h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Best no-SQL document database for managing users, code submissions, test results, and question banks.
-                </p>
-                <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> 1 GiB Storage (Millions of text documents)</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> 50,000 Free Reads & 20,000 Free Writes per day</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Free Authentication (Google & Email logins)</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> 5 GiB Storage for PDF & ZIP downloads</li>
-                </ul>
-              </div>
-
-              {/* Option 2: Cloud SQL / PostgreSQL */}
-              <div className={`p-6 rounded-2xl border space-y-3 ${
-                darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Relational SQL</span>
-                  <span className="text-xs font-semibold text-slate-500">Developer Scale</span>
-                </div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">PostgreSQL (Cloud SQL / Neon / Supabase)</h4>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Ideal if you require relational schema modeling with tables for students, submissions, and test logs.
-                </p>
-                <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-indigo-500" /> Strict SQL schema with Drizzle ORM</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-indigo-500" /> Scales to zero when idle</li>
-                  <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-indigo-500" /> Near instant provision</li>
-                </ul>
-              </div>
-
-            </div>
-          </div>
-
           {/* Admin Security Passcode Configuration */}
           <div className={`p-6 sm:p-8 rounded-3xl border space-y-5 ${darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
             <div className="flex items-center gap-3">
@@ -1105,7 +1082,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Admin Security Passcode Settings</h3>
-                <p className="text-xs text-slate-500">Change the master security passcode required to unlock the Admin Control Panel.</p>
+                <p className="text-xs text-slate-500">Change the master security passcode required to unlock the Admin Control Panel globally for all devices.</p>
               </div>
             </div>
 

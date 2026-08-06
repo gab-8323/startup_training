@@ -234,7 +234,7 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
     setTestResults([]);
     setActiveTestCaseIndex(0);
     if (problem.sampleCases.length > 0) {
-      setCustomInput(problem.sampleCases[0].input);
+      setCustomInput(decodeHtmlEntities(problem.sampleCases[0].input));
     }
 
     // Auto-fetch real live official LeetCode problem description if generic template
@@ -570,9 +570,12 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
     if (!activeProblem) return;
 
     setExecutionOutput({ status: 'running', message: 'Compiling & Executing Code...' });
-    setConsoleTab('testcases');
 
-    const sampleCases = activeProblem.sampleCases;
+    const isCustomRun = consoleTab === 'custom' && customInput.trim().length > 0;
+    const sampleCases = isCustomRun
+      ? [{ input: decodeHtmlEntities(customInput.trim()), output: '', explanation: 'Custom Test Case' }]
+      : activeProblem.sampleCases;
+
     const startTime = performance.now();
     const results: TestResult[] = [];
     let passedCounter = 0;
@@ -606,14 +609,14 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
         }
 
         const actualOutput = stderr ? `Error: ${stderr}` : (stdout || 'undefined');
-        const isPassed = !stderr && compareOutputs(stdout, cleanExpected);
+        const isPassed = isCustomRun ? !stderr : (!stderr && compareOutputs(stdout, cleanExpected));
 
         if (isPassed) passedCounter++;
 
         results.push({
           id: i + 1,
           input: cleanInput,
-          expected: cleanExpected,
+          expected: isCustomRun ? 'Custom Execution' : cleanExpected,
           actual: actualOutput,
           passed: isPassed,
           error: stderr || undefined,
@@ -624,8 +627,8 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
         errorMessage = err.message || 'Server compile request failed';
         results.push({
           id: i + 1,
-          input: testCase.input,
-          expected: testCase.output,
+          input: decodeHtmlEntities(testCase.input),
+          expected: decodeHtmlEntities(testCase.output),
           actual: `Error: ${errorMessage}`,
           passed: false,
           error: errorMessage,
@@ -633,6 +636,8 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
         });
       }
     }
+
+    setConsoleTab('testcases');
 
     const totalTimeMs = Math.floor(performance.now() - startTime + 20);
     const isAllPassed = passedCounter === sampleCases.length && !hasRuntimeError;
@@ -1057,11 +1062,11 @@ export const CodingPracticeView: React.FC<CodingPracticeViewProps> = ({
                         {activeProblem.problemStatement.includes('<') ? (
                           <div
                             className="text-slate-300 leading-relaxed font-sans text-xs space-y-2.5 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_pre]:bg-slate-900 [&_pre]:p-3 [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-slate-800 [&_pre]:font-mono [&_code]:bg-slate-800/80 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-emerald-300 [&_code]:font-mono [&_strong]:text-white"
-                            dangerouslySetInnerHTML={{ __html: activeProblem.problemStatement }}
+                            dangerouslySetInnerHTML={{ __html: decodeHtmlEntities(activeProblem.problemStatement) }}
                           />
                         ) : (
                           <div className="text-slate-300 leading-relaxed whitespace-pre-line font-sans">
-                            {activeProblem.problemStatement}
+                            {decodeHtmlEntities(activeProblem.problemStatement)}
                           </div>
                         )}
                       </div>
